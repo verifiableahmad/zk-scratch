@@ -3,5 +3,9 @@ name = "field"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "field"
+path = "src/lib.rs"
+
 [dependencies]
 proptest = "1.12.0"

@@ -3,4 +3,10 @@ name = "poly"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "poly"
+path = "src/lib.rs"
+
 [dependencies]
+field = { path = "../field" }
+
