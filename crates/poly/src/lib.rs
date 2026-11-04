@@ -94,12 +94,12 @@ impl<F: Field> Polynomial<F> {
     fn add(self, g: Polynomial<F>) -> Polynomial<F> {
         let lhs_degree = match self.degree() {
             Some(v) => v,
-            None => return g
+            None => return g,
         };
 
         let rhs_degree = match g.degree() {
             Some(v) => v,
-            None => return self
+            None => return self,
         };
 
         let (shorter, longer) = if rhs_degree < lhs_degree {
@@ -130,13 +130,17 @@ impl<F: Field> Polynomial<F> {
 
         self
     }
+
+    fn sub(self, g: Polynomial<F>) -> Polynomial<F> {
+        self.add(g.neg())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Neg;
     use super::*;
     use field::Goldilocks;
+    use std::ops::Neg;
     #[test]
     fn test_degree() {
         // 5x^3 + 2x^2 + 3x
@@ -261,7 +265,8 @@ mod tests {
         let f = Polynomial::new(f_coeffs);
         let g = Polynomial::new(g_coeffs);
 
-        let result: Vec<Goldilocks> = vec![Goldilocks(5), Goldilocks(4), Goldilocks(2), Goldilocks(1)];
+        let result: Vec<Goldilocks> =
+            vec![Goldilocks(5), Goldilocks(4), Goldilocks(2), Goldilocks(1)];
         let r = Polynomial::new(result);
 
         assert_eq!(f.add(g), r);
@@ -291,8 +296,7 @@ mod tests {
 
     #[test]
     fn test_cancellation() {
-        let f_coeffs: Vec<Goldilocks> =
-            vec![Goldilocks(1), Goldilocks(0), Goldilocks(1)];
+        let f_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(0), Goldilocks(1)];
         let g_coeffs: Vec<Goldilocks> = vec![Goldilocks(0), Goldilocks(0), Goldilocks::ONE.neg()];
 
         let one_poly = Polynomial::new(vec![Goldilocks::ONE]);
@@ -312,5 +316,57 @@ mod tests {
         let f_clone = f.clone();
 
         assert_eq!(f.add(f_clone.neg()), empty_poly);
+    }
+
+    #[test]
+    fn test_subtraction() {
+        let f_coeffs: Vec<Goldilocks> =
+            vec![Goldilocks(4), Goldilocks(3), Goldilocks(2), Goldilocks(1)];
+        let g_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(1)];
+
+        let f = Polynomial::new(f_coeffs);
+        let g = Polynomial::new(g_coeffs);
+
+        let result: Vec<Goldilocks> =
+            vec![Goldilocks(3), Goldilocks(2), Goldilocks(2), Goldilocks(1)];
+        let r = Polynomial::new(result);
+
+        assert_eq!(f.sub(g), r);
+    }
+
+    #[test]
+    fn test_poly_minus_itself() {
+        let f_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(0), Goldilocks(1)];
+        let empty_poly = Polynomial::new(vec![]);
+        let f = Polynomial::new(f_coeffs);
+        let f_clone = f.clone();
+        assert_eq!(f.sub(f_clone), empty_poly);
+    }
+
+    #[test]
+    fn test_poly_minus_zero() {
+        let f_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(0), Goldilocks(1)];
+        let f = Polynomial::new(f_coeffs);
+        let empty_poly = Polynomial::new(vec![]);
+        assert_eq!(f.clone().sub(empty_poly), f);
+    }
+
+    #[test]
+    fn test_zero_minus_poly() {
+        let f_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(0), Goldilocks(1)];
+        let f = Polynomial::new(f_coeffs);
+        let empty_poly = Polynomial::new(vec![]);
+        assert_eq!(empty_poly.sub(f.clone()), f.neg());
+    }
+
+    #[test]
+    fn test_minus_then_add() {
+        let f_coeffs: Vec<Goldilocks> = vec![Goldilocks(6), Goldilocks(1), Goldilocks(1)];
+        let f = Polynomial::new(f_coeffs);
+        let g = Polynomial::new(vec![Goldilocks(5)]);
+        let result: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(1), Goldilocks(1)];
+        let r = Polynomial::new(result);
+        assert_eq!(f.clone().sub(g.clone()), r);
+        assert_eq!(r.add(g), f);
     }
 }
