@@ -1,5 +1,5 @@
-use field::Field;
-use std::ops::Sub;
+use field::{Field, Goldilocks};
+use std::ops::{Mul, Sub};
 
 #[derive(Debug, PartialEq)]
 struct DivResult<F: Field> {
@@ -133,6 +133,30 @@ impl<F: Field> Polynomial<F> {
 
     fn sub(self, g: Polynomial<F>) -> Polynomial<F> {
         self.add(g.neg())
+    }
+
+    fn scalar_mul(mut self, s: F) -> Self {
+        for c in self.coefficients.iter_mut() {
+            *c = c.mul(s);
+        }
+
+        Polynomial::new(self.coefficients)
+    }
+
+    fn mul(self, g: Polynomial<F>) -> Polynomial<F> {
+        let f_len = self.coefficients.len();
+        let g_len = g.coefficients.len();
+
+        let mut result = Polynomial {
+            coefficients: vec![F::ZERO; f_len + g_len]
+        };
+
+        for i in 0..f_len {
+            for j in 0..g_len {
+                result.coefficients[i+j] += self.coefficients[i].mul(g.coefficients[j]);
+            }
+        }
+        Polynomial::new(result.coefficients)
     }
 }
 
