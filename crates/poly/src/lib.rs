@@ -1,10 +1,17 @@
 use field::{Field, Goldilocks};
-use std::ops::{Mul, Sub};
+use std::ops::{Mul, Neg, Sub};
+use std::ptr::addr_of;
 
 #[derive(Debug, PartialEq)]
 struct DivResult<F: Field> {
     quotient: Polynomial<F>,
     remainder: Polynomial<F>,
+}
+
+#[derive(Debug, PartialEq)]
+struct SyntheticDivResult<F: Field> {
+    poly: Polynomial<F>,
+    remainder: F,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,7 +52,7 @@ impl<F: Field> Polynomial<F> {
     fn eval(&self, x: F) -> F {
         let mut acc = F::ZERO;
         for i in (0..self.coefficients.len()).rev() {
-            acc = acc.mul(x).add(*self.coefficients.get(i).unwrap());
+            acc = acc.mul(x).add(self.coefficients[i]);
         }
         acc
     }
@@ -135,12 +142,12 @@ impl<F: Field> Polynomial<F> {
         self.add(g.neg())
     }
 
-    fn scalar_mul(mut self, s: F) -> Self {
+    fn scalar_mul(&mut self, s: F) -> Self {
         for c in self.coefficients.iter_mut() {
             *c = c.mul(s);
         }
 
-        Polynomial::new(self.coefficients)
+        Polynomial::new(self.coefficients.clone())
     }
 
     fn mul(self, g: Polynomial<F>) -> Polynomial<F> {
@@ -148,15 +155,63 @@ impl<F: Field> Polynomial<F> {
         let g_len = g.coefficients.len();
 
         let mut result = Polynomial {
-            coefficients: vec![F::ZERO; f_len + g_len]
+            coefficients: vec![F::ZERO; f_len + g_len],
         };
 
         for i in 0..f_len {
             for j in 0..g_len {
-                result.coefficients[i+j] += self.coefficients[i].mul(g.coefficients[j]);
+                result.coefficients[i + j] += self.coefficients[i].mul(g.coefficients[j]);
             }
         }
         Polynomial::new(result.coefficients)
+    }
+
+    // Steps for Synthetic Division:
+    //      1. take in a poly of the form x-a or x+a
+    //      2. find what makes the poly result to zero by flipping the sign of the const_a
+    //      3. start a loop:
+    //      4. for every coefficient c, multiply by const_a and then add the product to the next c
+    //      5. the accumulator value gets saved for the result polynomial
+    //      6. the final multiplication result is the remainder
+    fn synthetic_div(&self, g: Polynomial<F>) -> SyntheticDivResult<F> {
+        let a = g.coefficients[0].neg();
+        // Accumulator starts with largest degree coefficient
+        let mut acc = self.coefficients[self.degree().unwrap()];
+        let mut result = Polynomial {
+            coefficients: vec![acc; self.degree().unwrap()],
+        };
+
+        for i in (0..self.coefficients.len() - 1).rev() {
+            acc = acc.mul(a) + self.coefficients[i];
+            if i > 0 {
+                result.coefficients[i - 1] = acc;
+            }
+        }
+
+        SyntheticDivResult {
+            poly: result,
+            remainder: acc,
+        }
+    }
+
+    fn interpolate(points: Vec<(Goldilocks, Goldilocks)>) -> Polynomial<Goldilocks> {
+        let degree = points.len();
+        let mut z_poly = Polynomial::new(vec![Goldilocks::ONE]);
+        let mut result = Polynomial::new(vec![Goldilocks::ZERO]);
+
+        // Build the global polynomial
+        for (x, y) in points.iter() {
+            z_poly = z_poly.mul(Polynomial::new(vec![(*x).neg(), Goldilocks::ONE]));
+        }
+
+        for i in 0..degree {
+            let mut numerator = z_poly.synthetic_div(Polynomial::new(vec![points[i].0.neg(), Goldilocks::ONE]));
+            let denominator = numerator.poly.eval(points[i].0);
+            let li = numerator.poly.scalar_mul(denominator.inverse().unwrap());
+            result = result.add(li.mul(Polynomial::new(vec![points[i].1])));
+        }
+
+        result
     }
 }
 
@@ -392,5 +447,31 @@ mod tests {
         let r = Polynomial::new(result);
         assert_eq!(f.clone().sub(g.clone()), r);
         assert_eq!(r.add(g), f);
+    }
+
+    #[test]
+    fn test_synthetic_div() {
+        let f_coeffs: Vec<Goldilocks> = vec![
+            Goldilocks(2).neg(),
+            Goldilocks(1),
+            Goldilocks(5).neg(),
+            Goldilocks(3),
+        ];
+        let f = Polynomial::new(f_coeffs);
+        let g_coeffs: Vec<Goldilocks> = vec![Goldilocks(2).neg(), Goldilocks(1)];
+        let g = Polynomial::new(g_coeffs);
+        let expected_coeffs: Vec<Goldilocks> = vec![Goldilocks(3), Goldilocks(1), Goldilocks(3)];
+        let expected_remainder = Goldilocks(4);
+        let result: SyntheticDivResult<Goldilocks> = f.synthetic_div(g);
+        assert_eq!(result.poly.coefficients, expected_coeffs);
+        assert_eq!(result.remainder, expected_remainder);
+    }
+
+    #[test]
+    fn test_interpolation() {
+        let points: Vec<(Goldilocks, Goldilocks)> = vec![(Goldilocks(0), Goldilocks(1)), (Goldilocks(1), Goldilocks(3)), (Goldilocks(2), Goldilocks(7))];
+        let expected_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(1), Goldilocks(1)];
+        let result: Polynomial<Goldilocks> = Polynomial::<Goldilocks>::interpolate(points);
+        assert_eq!(result.coefficients, expected_coeffs);
     }
 }
