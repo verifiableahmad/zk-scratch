@@ -61,6 +61,7 @@ impl Field for Goldilocks {
 
     fn root_of_unity(log_n: u32) -> Self {
         assert!(log_n <= Self::TWO_ADICITY, "log_n exceeds 2-adicity");
+        // exponent = p-1/2^log_n
         let exponent = (Self::PRIME - 1) >> log_n;
         Self(Self::GENERATOR).pow(exponent)
     }

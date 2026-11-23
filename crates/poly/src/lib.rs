@@ -194,24 +194,74 @@ impl<F: Field> Polynomial<F> {
         }
     }
 
-    fn interpolate(points: Vec<(Goldilocks, Goldilocks)>) -> Polynomial<Goldilocks> {
+    fn interpolate(points: Vec<(F, F)>) -> Polynomial<F> {
         let degree = points.len();
-        let mut z_poly = Polynomial::new(vec![Goldilocks::ONE]);
-        let mut result = Polynomial::new(vec![Goldilocks::ZERO]);
+        let mut z_poly = Polynomial::new(vec![F::ONE]);
+        let mut result = Polynomial::new(vec![F::ZERO]);
 
         // Build the global polynomial
         for (x, y) in points.iter() {
-            z_poly = z_poly.mul(Polynomial::new(vec![(*x).neg(), Goldilocks::ONE]));
+            // z_poly *= -x+1X
+            z_poly = z_poly.mul(Polynomial::new(vec![(*x).neg(), F::ONE]));
         }
 
         for i in 0..degree {
-            let mut numerator = z_poly.synthetic_div(Polynomial::new(vec![points[i].0.neg(), Goldilocks::ONE]));
+            let mut numerator = z_poly.synthetic_div(Polynomial::new(vec![points[i].0.neg(), F::ONE]));
             let denominator = numerator.poly.eval(points[i].0);
             let li = numerator.poly.scalar_mul(denominator.inverse().unwrap());
             result = result.add(li.mul(Polynomial::new(vec![points[i].1])));
         }
 
         result
+    }
+
+    fn barycentric_eval(z: F, evals: Vec<F>) -> F {
+        /*
+            a. this method takes 2 inputs:
+                - z: an F point to evaluate at
+                - evals: n trace values where every entry is f(omega^i)
+            b. steps are as follows:
+                1. compute z_n=z^n once (since n is a power of 2, we can use the squaring method)
+                2. calculate omega = root_of_unity(log2(n: the evals param length))
+                3. handle when z belongs to H. if z^n-1=0, that means z^n is 1, and it's one of the points omega^i
+                   which means the formula would divide by zero. in that case, walk thru the powers of omega and
+                   find the i where omega^i=z and return evals[i] as the result
+                4. create omega_powered variable as 1 to maintain the different omega^i values
+                5. set an accumulator (acc=0) and start a loop from 0 to n-1:
+                    5.1 diff = z-omega^i (diff between the point we want to evaluate and every element in H, the subgroup)
+                    5.2 acc += evals[i] * omega^i * diff.inverse()
+                    5.3 advance omega^i to omega^(i+1): omega_powered *= omega
+                6. f(z) = acc * (z_n - 1) * n.inverse() (this is the f(z), the y)
+        */
+
+        let n = evals.len();
+        assert_ne!(n, 0, "n must not be zero");
+        assert_eq!(n & (n-1), 0, "n must be a power of two");
+
+        let z_n = z.pow(n as u64);
+        let omega = F::root_of_unity(n.ilog2());
+        let mut omega_powered = F::ONE;
+
+        if z_n == F::ONE {
+            for i in 0..n as u64 {
+                if omega_powered == z {
+                    return evals[i as usize];
+                }
+                omega_powered *= omega
+            }
+            unreachable!()
+        }
+
+        let mut acc = F::ZERO;
+        omega_powered = F::ONE;
+
+        for i in 0..n {
+            let diff_inverse = z.sub(omega_powered).inverse().unwrap();
+            acc = acc + (evals[i] * omega_powered * diff_inverse);
+            omega_powered *= omega;
+        }
+
+        acc * z_n.sub(F::ONE).mul(F::from_u64(n as u64).inverse().unwrap())
     }
 }
 
