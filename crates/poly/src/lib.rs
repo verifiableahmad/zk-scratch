@@ -194,7 +194,7 @@ impl<F: Field> Polynomial<F> {
         }
     }
 
-    fn interpolate(points: Vec<(F, F)>) -> Polynomial<F> {
+    fn interpolate(points: &Vec<(F, F)>) -> Polynomial<F> {
         let degree = points.len();
         let mut z_poly = Polynomial::new(vec![F::ONE]);
         let mut result = Polynomial::new(vec![F::ZERO]);
@@ -203,10 +203,12 @@ impl<F: Field> Polynomial<F> {
         for (x, y) in points.iter() {
             // z_poly *= -x+1X
             z_poly = z_poly.mul(Polynomial::new(vec![(*x).neg(), F::ONE]));
+            println!("{:?}", z_poly);
         }
 
         for i in 0..degree {
-            let mut numerator = z_poly.synthetic_div(Polynomial::new(vec![points[i].0.neg(), F::ONE]));
+            let mut numerator =
+                z_poly.synthetic_div(Polynomial::new(vec![points[i].0.neg(), F::ONE]));
             let denominator = numerator.poly.eval(points[i].0);
             let li = numerator.poly.scalar_mul(denominator.inverse().unwrap());
             result = result.add(li.mul(Polynomial::new(vec![points[i].1])));
@@ -236,7 +238,7 @@ impl<F: Field> Polynomial<F> {
 
         let n = evals.len();
         assert_ne!(n, 0, "n must not be zero");
-        assert_eq!(n & (n-1), 0, "n must be a power of two");
+        assert_eq!(n & (n - 1), 0, "n must be a power of two");
 
         let z_n = z.pow(n as u64);
         let omega = F::root_of_unity(n.ilog2());
@@ -261,7 +263,9 @@ impl<F: Field> Polynomial<F> {
             omega_powered *= omega;
         }
 
-        acc * z_n.sub(F::ONE).mul(F::from_u64(n as u64).inverse().unwrap())
+        acc * z_n
+            .sub(F::ONE)
+            .mul(F::from_u64(n as u64).inverse().unwrap())
     }
 }
 
@@ -519,9 +523,34 @@ mod tests {
 
     #[test]
     fn test_interpolation() {
-        let points: Vec<(Goldilocks, Goldilocks)> = vec![(Goldilocks(0), Goldilocks(1)), (Goldilocks(1), Goldilocks(3)), (Goldilocks(2), Goldilocks(7))];
+        let points: Vec<(Goldilocks, Goldilocks)> = vec![
+            (Goldilocks(0), Goldilocks(1)),
+            (Goldilocks(1), Goldilocks(3)),
+            (Goldilocks(2), Goldilocks(7)),
+        ];
         let expected_coeffs: Vec<Goldilocks> = vec![Goldilocks(1), Goldilocks(1), Goldilocks(1)];
-        let result: Polynomial<Goldilocks> = Polynomial::<Goldilocks>::interpolate(points);
+        let result: Polynomial<Goldilocks> = Polynomial::<Goldilocks>::interpolate(&points);
         assert_eq!(result.coefficients, expected_coeffs);
+    }
+
+    #[test]
+    fn test_barycentric_eval() {
+        let points_length_log2: u32 = 2; // size is 4
+        let omega = Goldilocks::root_of_unity(points_length_log2);
+        let omega_pow2 = omega * omega;
+        let omega_pow3 = omega_pow2 * omega;
+        let omega_pow4 = omega_pow3 * omega;
+        let omega_pow5 = omega_pow4 * omega;
+        let points: Vec<(Goldilocks, Goldilocks)> = vec![
+            (omega_pow4, Goldilocks(3)),
+            (omega_pow5, Goldilocks(1)),
+            (omega_pow2, Goldilocks(2)),
+            (omega_pow3, Goldilocks(3)),
+        ];
+        let z = Goldilocks(5);
+        let interpolated: Polynomial<Goldilocks> = Polynomial::<Goldilocks>::interpolate(&points);
+        let evals = vec![points[0].1, points[1].1, points[2].1, points[3].1];
+        let barycentric_eval: Goldilocks = Polynomial::<Goldilocks>::barycentric_eval(z, evals);
+        assert_eq!(interpolated.eval(z), barycentric_eval);
     }
 }
